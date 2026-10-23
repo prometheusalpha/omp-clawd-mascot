@@ -97,5 +97,3 @@ Which animation a state uses is chosen in `mascot-bubble.ts` by `IDLE_ANIM` and 
 | `mascot/art.ts` | Hand-authored palette-indexed frames |
 | `mascot/render.ts` | Renders `art.ts` to `preview.png` |
 | `mascot/preview.png` | Generated preview sheet, one row per animation |
-
-The old sprite-sheet pipeline (`frames.ts`, `slice.ts`, `pack.ts`, `sprites/`, `sheet*.webp`) is no longer imported by the extension and can be deleted.
