@@ -1,4 +1,4 @@
-import framesJson from "./mascot/frames";
+import { ART } from "./mascot/art";
 
 // Mascot + speech bubble docked directly above the composer.
 //
@@ -12,34 +12,26 @@ import framesJson from "./mascot/frames";
 // a TUI (no requestRender). Re-calling setWidget rebuilds the widget container
 // and requests a render, which is how each animation frame gets painted.
 //
-// The mascot is pixel art packed by `mascot-frames.json` from the crab sprite
-// sheet in `mascot/sprites/` (see `mascot/slice.ts`, `mascot/pack.ts`). Each terminal cell carries two art pixels as a
-// half block (`▀`, foreground on top, background below), so a square art pixel
-// stays square in a cell that is twice as tall as it is wide. Frames are
-// palette indices: `0` is transparent, `1`-`8` index the animation's palette.
-// Every animation packs onto the same 16x12 art-pixel canvas, which keeps the
+// The mascot is hand-authored pixel art (`mascot/art.ts`). Each terminal cell
+// carries two art pixels as a half block (`▀`, foreground on top, background
+// below), so a square art pixel stays square in a cell that is twice as tall as
+// it is wide. Frames are palette indices: `0` is transparent, `1`-`9` index
+// PALETTE. Every frame shares the same 14x9 art-pixel canvas, which keeps the
 // widget height fixed when the state (and so the animation) changes.
 
-interface FrameSet {
-	readonly cols: number;
-	readonly pxRows: number;
-	readonly anims: Record<string, { readonly palette: readonly string[]; readonly frames: readonly string[][] }>;
-}
-
-const FRAMES = framesJson as FrameSet;
 /** Artwork column count; the canvas is shared by every animation. */
-const ART_WIDTH = FRAMES.cols;
+const ART_WIDTH = ART.cols;
 /** Terminal rows the artwork occupies: two art pixels per cell. */
-const ART_ROWS = Math.ceil(FRAMES.pxRows / 2);
-/** Animation per mascot state. `miner` carries its own pickaxe and helmet. */
-const IDLE_ANIM = "run-spark";
-const WORKING_ANIM = "miner";
-/** Rows the bubble spans, vertically centred on the crab. */
+const ART_ROWS = Math.ceil(ART.pxRows / 2);
+/** Animation per mascot state: a dozing puddle while waiting, a coffee sip while the agent works. */
+const IDLE_ANIM = "idle";
+const WORKING_ANIM = "working";
+/** Rows the bubble spans, vertically centred on the mascot. */
 const BUBBLE_TOP = 1;
 /** Fixed inner width so the frame never jitters as the label and dots change. */
 const BUBBLE_INNER = 24;
 
-/** Fast enough to read as motion; the dots run at half this rate. */
+/** Timer granularity: animation frames advance every other tick, i.e. 220 ms. */
 const TICK_MS = 110;
 const DOT_FRAMES = 4;
 const WIDGET_KEY = "mascot-bubble";
@@ -152,12 +144,12 @@ class MascotBubble {
 	#build(width: number): readonly string[] {
 		const working = this.#state.kind === "working";
 		const label = working ? this.#state.label : "";
-		const art = FRAMES.anims[working ? WORKING_ANIM : IDLE_ANIM] ?? FRAMES.anims[IDLE_ANIM]!;
+		const art = ART.anims[working ? WORKING_ANIM : IDLE_ANIM] ?? ART.anims[IDLE_ANIM]!;
 		const grid = art.frames[this.#frame % art.frames.length]!;
 		const truecolor = this.#theme.getColorMode?.() === "truecolor";
 		const gap = "  ";
 		const roomForBubble = width >= ART_WIDTH + gap.length + BUBBLE_INNER + 2;
-		// Narrow terminal: the crab alone, clipped by columns so no escape is cut.
+		// Narrow terminal: the mascot alone, clipped by columns so no escape is cut.
 		const artCols = roomForBubble ? ART_WIDTH : Math.min(ART_WIDTH, width);
 
 		const artRows: string[] = [];
@@ -166,16 +158,16 @@ class MascotBubble {
 			for (let col = 0; col < artCols; col++) {
 				const topIndex = grid[row * 2]![col]!;
 				const bottomIndex = grid[row * 2 + 1]?.[col] ?? "0";
-				const top = topIndex === "0" ? null : (art.palette[parseInt(topIndex, 36) - 1] ?? null);
-				const bottom = bottomIndex === "0" ? null : (art.palette[parseInt(bottomIndex, 36) - 1] ?? null);
+				const top = topIndex === "0" ? null : (ART.palette[parseInt(topIndex, 36) - 1] ?? null);
+				const bottom = bottomIndex === "0" ? null : (ART.palette[parseInt(bottomIndex, 36) - 1] ?? null);
 				line += this.#cell(top, bottom, truecolor);
 			}
 			artRows.push(line);
 		}
 		if (!roomForBubble) return artRows;
 
-		// The dots tick at half the sprite rate, so a 4-dot cycle lasts a beat.
-		const dotFrame = Math.floor(this.#frame / 2) % DOT_FRAMES;
+		// One dot per sprite frame (220 ms), so a 4-dot cycle lasts a beat.
+		const dotFrame = this.#frame % DOT_FRAMES;
 		const bubbleText = working
 			? `${truncatePlain(label, BUBBLE_INNER - 3)}${".".repeat(dotFrame)}`
 			: "…";
@@ -238,10 +230,10 @@ export default function (pi: MascotExtensionAPI) {
 
 		let ticks = 0;
 		const timer = ctx.setInterval(() => {
-			// Idle keeps running too, at half rate: the crab is always mid-stride,
-			// but a still-composer screen does not need the working cadence.
+			// One frame per two ticks (220 ms): at 110 ms the coffee smoke boils
+			// too fast to read as smoke, and the sleeping puddle needs even less.
 			ticks++;
-			if (state.kind !== "working" && ticks % 2 === 0) return;
+			if (ticks % 2 !== 0) return;
 			frame++;
 			paint();
 		}, TICK_MS);
