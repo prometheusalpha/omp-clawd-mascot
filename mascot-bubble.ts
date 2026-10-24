@@ -14,22 +14,27 @@ import { ART } from "./mascot/art";
 //
 // The mascot is hand-authored pixel art (`mascot/art.ts`). Each terminal cell
 // carries two art pixels as a half block (`▀`, foreground on top, background
-// below), so a square art pixel stays square in a cell that is twice as tall as
-// it is wide. Frames are palette indices: `0` is transparent, `1`-`9` index
-// PALETTE. Every frame shares the same 14x9 art-pixel canvas, which keeps the
-// widget height fixed when the state (and so the animation) changes.
+// below). A half-block pixel is taller than it is wide in this terminal
+// (~17x47 px cells), so the art is authored 19 columns wide to compensate
+// instead of resampling columns at render time, which made the strokes uneven.
+// Frames are palette indices: `0` is transparent, `1`-`9` index PALETTE. Every
+// frame shares the same 19x9 art-pixel canvas, which keeps the widget height
+// fixed when the state (and so the animation) changes.
 
 /** Artwork column count; the canvas is shared by every animation. */
 const ART_WIDTH = ART.cols;
 /** Terminal rows the artwork occupies: two art pixels per cell. */
 const ART_ROWS = Math.ceil(ART.pxRows / 2);
+
 /** Animation per mascot state: a dozing puddle while waiting, a coffee sip while the agent works. */
 const IDLE_ANIM = "idle";
 const WORKING_ANIM = "working";
-/** Rows the bubble spans, vertically centred on the mascot. */
-const BUBBLE_TOP = 1;
-/** Fixed inner width so the frame never jitters as the label and dots change. */
-const BUBBLE_INNER = 24;
+/** Narrowest inner width; below this the mascot paints alone. */
+const BUBBLE_MIN_INNER = 24;
+/** Widest inner width: past this the eye has to travel farther than it reads. */
+const BUBBLE_MAX_INNER = 64;
+/** Core's own working-row text before any tool reports an intent. */
+const DEFAULT_LABEL = "Working";
 
 /** Timer granularity: animation frames advance every other tick, i.e. 220 ms. */
 const TICK_MS = 110;
@@ -70,15 +75,13 @@ type TimerHandle = unknown;
 
 /** Only the events this extension consumes; the host API accepts these handlers. */
 interface MascotExtensionAPI {
-	on(event: "tool_execution_start", handler: (event: { toolName?: string }, ctx: SessionContext) => unknown): void;
+	on(
+		event: "tool_execution_start",
+		handler: (event: { toolName?: string; intent?: string }, ctx: SessionContext) => unknown,
+	): void;
 	on(event: "input", handler: (event: { text?: string; source?: string }, ctx: SessionContext) => unknown): void;
 	on(
-		event:
-			| "session_start"
-			| "session_shutdown"
-			| "agent_start"
-			| "tool_execution_end"
-			| "agent_end",
+		event: "session_start" | "session_shutdown" | "agent_start" | "agent_end",
 		handler: (event: unknown, ctx: SessionContext) => unknown,
 	): void;
 }
@@ -148,7 +151,9 @@ class MascotBubble {
 		const grid = art.frames[this.#frame % art.frames.length]!;
 		const truecolor = this.#theme.getColorMode?.() === "truecolor";
 		const gap = "  ";
-		const roomForBubble = width >= ART_WIDTH + gap.length + BUBBLE_INNER + 2;
+		// The bubble takes whatever the terminal leaves after the art, up to a readable cap.
+		const available = width - ART_WIDTH - gap.length - 2;
+		const roomForBubble = available >= BUBBLE_MIN_INNER;
 		// Narrow terminal: the mascot alone, clipped by columns so no escape is cut.
 		const artCols = roomForBubble ? ART_WIDTH : Math.min(ART_WIDTH, width);
 
@@ -166,20 +171,27 @@ class MascotBubble {
 		}
 		if (!roomForBubble) return artRows;
 
+		const inner = Math.min(BUBBLE_MAX_INNER, available);
+		const textWidth = inner - 2;
 		// One dot per sprite frame (220 ms), so a 4-dot cycle lasts a beat.
-		const dotFrame = this.#frame % DOT_FRAMES;
-		const bubbleText = working
-			? `${truncatePlain(label, BUBBLE_INNER - 3)}${".".repeat(dotFrame)}`
-			: "…";
+		const dots = this.#frame % DOT_FRAMES;
+		// Mirrors the core working row: same text, same single line.
+		const lines: readonly string[] = working
+			? [`${truncatePlain(label, textWidth - 3)}${".".repeat(dots)}`]
+			: ["…"];
 		const border = working ? "accent" : "dim";
 		const bubble = [
-			this.#theme.fg(border, `╭${"─".repeat(BUBBLE_INNER)}╮`),
-			`${this.#theme.fg(border, "│")} ${this.#theme.fg(working ? "accent" : "dim", bubbleText.padEnd(BUBBLE_INNER - 2))} ${this.#theme.fg(border, "│")}`,
-			this.#theme.fg(border, `╰${"─".repeat(BUBBLE_INNER)}╯`),
+			this.#theme.fg(border, `╭${"─".repeat(inner)}╮`),
+			...lines.map(
+				line =>
+					`${this.#theme.fg(border, "│")} ${this.#theme.fg(working ? "accent" : "dim", line + " ".repeat(Math.max(0, textWidth - Bun.stringWidth(line))))} ${this.#theme.fg(border, "│")}`,
+			),
+			this.#theme.fg(border, `╰${"─".repeat(inner)}╯`),
 		];
+		const top = Math.floor((ART_ROWS - bubble.length) / 2);
 
 		return artRows.map((row, index) => {
-			const bubbleLine = bubble[index - BUBBLE_TOP];
+			const bubbleLine = bubble[index - top];
 			return bubbleLine === undefined ? row : `${row}${gap}${bubbleLine}`;
 		});
 	}
@@ -201,7 +213,7 @@ export default function (pi: MascotExtensionAPI) {
 
 		const startWorking = () => {
 			if (state.kind === "working") return;
-			state = { kind: "working", label: "Thinking" };
+			state = { kind: "working", label: DEFAULT_LABEL };
 			frame = 0;
 			paint();
 		};
@@ -254,12 +266,10 @@ export default function (pi: MascotExtensionAPI) {
 			startWorking();
 		});
 		pi.on("tool_execution_start", event => {
-			state = { kind: "working", label: event.toolName ?? "Working" };
+			// `intent` is the same string the core working row displays; the row
+			// keeps it after the tool ends, so the bubble does too.
+			state = { kind: "working", label: event.intent?.trim() || event.toolName || DEFAULT_LABEL };
 			frame = 0;
-			paint();
-		});
-		pi.on("tool_execution_end", () => {
-			state = { kind: "working", label: "Thinking" };
 			paint();
 		});
 		pi.on("agent_end", () => setIdle());

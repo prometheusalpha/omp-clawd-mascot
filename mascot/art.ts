@@ -3,7 +3,7 @@
 // widget height never changes between states; the dozing puddle and the
 // thinking steam both move within that fixed grid.
 
-export const ART_COLS = 14;
+export const ART_COLS = 19;
 export const ART_PX_ROWS = 9;
 
 /** Body colours, then the face accents, the sleeping `z`, and the thinking cup. */
@@ -23,19 +23,19 @@ const BLANK = "0".repeat(ART_COLS);
 
 /** Sleeping pose: a wide puddle melted out to both sides, eyes closed and low. */
 const PUDDLE = [
-	"00000000000000",
-	"00000000000000",
-	"00000000000000",
-	"00000000000000",
-	"00002222220000",
-	"00251111115200",
-	"02111111111120",
-	"21113311331112",
-	"22111111111122",
+	"0000000000000000000",
+	"0000000000000000000",
+	"0000000000000000000",
+	"0000000000000000000",
+	"0000022222222000000",
+	"0002511111111152000",
+	"0021111111111111200",
+	"2111133311133311112",
+	"2211111111111111122",
 ];
 
 /** A little `z` that drifts up over the puddle while it sleeps. */
-const Z = ["666", "060", "666"];
+const Z = ["6666", "0066", "6666"];
 
 /**
  * Thinking pose: the mascot holds a mug in its right hand. The squat body sits
@@ -43,15 +43,15 @@ const Z = ["666", "060", "666"];
  * the column above the mug stays free for it to rise through.
  */
 const THINK = [
-	"00000000000000",
-	"00000000000000",
-	"00000000000000",
-	"00022220000000",
-	"00251111200000",
-	"02131113120000",
-	"02111111120880",
-	"21111111112777",
-	"21111111112770",
+	"0000000000000000000",
+	"0000000000000000000",
+	"0000000000000000000",
+	"0000222222000000000",
+	"0002511111120000000",
+	"0211311113112000000",
+	"0211111111112008880",
+	"2111111111111127777",
+	"2111111111111127770",
 ];
 
 /**
@@ -68,7 +68,7 @@ const SMOKE = [
 const BLINK = THINK.map(row => row.replaceAll("3", "1"));
 
 /** Glance: both pupils shift one column toward the mug, then back. */
-const GLANCE = THINK.map(row => row.replace("02131113120000", "02113111320000"));
+const GLANCE = THINK.map(row => row.replace("0211311113112000000", "0211131111312000000"));
 
 /** Place `sprite` on `base`; the sprite's `0` cells stay transparent. */
 function overlay(base: readonly string[], sprite: readonly string[], top: number, left: number): readonly string[] {
@@ -85,10 +85,10 @@ function overlay(base: readonly string[], sprite: readonly string[], top: number
 }
 
 /** The `z` drifting up into its peak over the puddle. */
-const DOZING = overlay(PUDDLE, Z, 1, 9);
+const DOZING = overlay(PUDDLE, Z, 1, 12);
 
 /** The `z` at the top of its drift, held for a beat. */
-const DOZE = overlay(PUDDLE, Z, 0, 9);
+const DOZE = overlay(PUDDLE, Z, 0, 12);
 
 export type Art = {
 	readonly cols: number;
@@ -110,12 +110,12 @@ export const ART: Art = {
 		// three-frame glance at the mug so the pose never reads as a still image.
 		working: {
 			frames: [
-				overlay(THINK, SMOKE[0]!, 0, 11),
-				overlay(THINK, SMOKE[1]!, 0, 11),
-				overlay(BLINK, SMOKE[0]!, 0, 11),
-				overlay(GLANCE, SMOKE[1]!, 0, 11),
-				overlay(GLANCE, SMOKE[0]!, 0, 11),
-				overlay(GLANCE, SMOKE[1]!, 0, 11),
+				overlay(THINK, SMOKE[0]!, 0, 15),
+				overlay(THINK, SMOKE[1]!, 0, 15),
+				overlay(BLINK, SMOKE[0]!, 0, 15),
+				overlay(GLANCE, SMOKE[1]!, 0, 15),
+				overlay(GLANCE, SMOKE[0]!, 0, 15),
+				overlay(GLANCE, SMOKE[1]!, 0, 15),
 			],
 		},
 	},

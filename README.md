@@ -3,8 +3,8 @@
 Animated pixel-art mascot for [omp](https://github.com/can1357/oh-my-pi), docked directly above the composer with a speech bubble that mirrors what the agent is doing.
 
 - **Idle** — the mascot dozes as a puddle, a little `z` drifts up, and the bubble shows `…`.
-- **Working** — the mascot holds a mug while steam drifts off it, blinking once and glancing at the mug once per cycle; the bubble names the active tool (`Thinking`, `read`, `bash`, …) with animated dots.
-- Narrow terminals (under 42 columns) drop the bubble and keep the mascot.
+- **Working** — the mascot holds a mug while steam drifts off it, blinking once and glancing at the mug once per cycle; the bubble repeats the core working row's text (the tool intent, `Working` before any tool) with animated dots.
+- Narrow terminals (under 47 columns) drop the bubble and keep the mascot.
 - Only the main TUI session draws it; subagent sessions share the process but not the composer.
 
 ## Requirements
@@ -49,7 +49,7 @@ omp auto-discovers `*.ts` / `*.js` modules in that directory, so this persists a
 
 ### Verify
 
-Start `omp` in a terminal. The mascot appears above the composer immediately; submit a prompt and the bubble should switch to `Thinking`, then to each tool name as it runs. If it does not appear:
+Start `omp` in a terminal. The mascot appears above the composer immediately; submit a prompt and the bubble should show `Working`, then the same text as the working row as tools run. If it does not appear:
 
 - confirm you are in the TUI (not `-p`/`--mode rpc`), where `ctx.hasUI` is true;
 - check that `mascot/art.ts` sits next to `mascot-bubble.ts` (for option 3, the whole `mascot/` folder must be copied, not just the entry file);
@@ -70,8 +70,8 @@ mascot/art.ts ──> mascot-bubble.ts
       └── render.ts ──> mascot/preview.png
 ```
 
-- Every frame shares the same 14 × 9 art-pixel canvas, so the widget height never changes between states.
-- Each terminal cell carries two art pixels as a half block (`▀`, foreground above, background below), keeping art pixels square in cells that are twice as tall as they are wide.
+- Every frame shares the same 19 × 9 art-pixel canvas, so the widget height never changes between states.
+- Each terminal cell carries two art pixels as a half block (`▀`, foreground above, background below). A half block is taller than wide in this terminal (~17 × 47 px cells), so the artwork is authored 19 columns wide instead of resampled at render time, which kept the strokes even. The preview uses the same pixel aspect, so `preview.png` matches the TUI.
 - Frames are palette indices: `0` is transparent; `1`–`9` (base36) index `PALETTE` in `art.ts`.
 - The working pose is a fixed body with the mug, hand and eyes on one grid; only the smoke, blink and glance frames change. The smoke is three single-cell puffs two art rows apart, and every frame swaps the arrangement for its left-right mirror, so the plume boils without ever settling. The idle pose stays a `PUDDLE` grid the whole loop, with the `z` drifting over it.
 
@@ -85,7 +85,7 @@ To look at the art outside the TUI:
 bun mascot/render.ts   # art.ts -> mascot/preview.png
 ```
 
-`preview.png` lays every animation out as a row of frames, scaled up with nearest-neighbour. The PNG is written by `render.ts` with a minimal encoder, so no image tooling is required.
+`preview.png` lays every animation out as a row of frames, scaled up with nearest-neighbour at the terminal's pixel aspect (tall half-blocks, not square pixels), so the sheet shows what the TUI shows. The PNG is written by `render.ts` with a minimal encoder, so no image tooling is required.
 
 Which animation a state uses is chosen in `mascot-bubble.ts` by `IDLE_ANIM` and `WORKING_ANIM`.
 
