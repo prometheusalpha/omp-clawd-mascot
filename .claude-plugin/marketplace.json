@@ -1,0 +1,5 @@
+{
+  "name": "omp-mascot",
+  "owner": { "name": "hoangnh" },
+  "plugins": [{ "name": "omp-mascot", "source": "./" }]
+}

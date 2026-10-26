@@ -34,8 +34,12 @@ const PUDDLE = [
 	"2211111111111111122",
 ];
 
-/** A little `z` that drifts up over the puddle while it sleeps. */
-const Z = ["6666", "0066", "6666"];
+/**
+ * A little `z` that drifts up over the puddle while it sleeps. Both inner rows
+ * carry a single pixel, so the diagonal is a one-pixel staircase from the
+ * top-right corner down to the bottom-left one.
+ */
+const Z = ["6666", "0060", "0600", "6666"];
 
 /**
  * Thinking pose: the mascot holds a mug in its right hand. The squat body sits
@@ -85,10 +89,10 @@ function overlay(base: readonly string[], sprite: readonly string[], top: number
 }
 
 /** The `z` drifting up into its peak over the puddle. */
-const DOZING = overlay(PUDDLE, Z, 1, 12);
+const DOZING = overlay(PUDDLE, Z, 1, 14);
 
 /** The `z` at the top of its drift, held for a beat. */
-const DOZE = overlay(PUDDLE, Z, 0, 12);
+const DOZE = overlay(PUDDLE, Z, 0, 14);
 
 export type Art = {
 	readonly cols: number;

@@ -1,0 +1,7 @@
+{
+  "name": "omp-mascot",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Pixel mascot that replaces the working spinner and dozes above the prompt when idle",
+  "types": "./types/index.d.ts"
+}
