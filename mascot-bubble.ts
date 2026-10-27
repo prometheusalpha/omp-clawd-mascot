@@ -1,4 +1,6 @@
 import { ART } from "./mascot/art";
+import { BODY_COLS, CLAWD_ANIMS, FRAME_MS, clawdFrame, type ClawdCell } from "./mascot/clawd";
+import { MASCOT } from "./mascot/config";
 
 // Mascot + speech bubble docked directly above the composer.
 //
@@ -12,23 +14,31 @@ import { ART } from "./mascot/art";
 // a TUI (no requestRender). Re-calling setWidget rebuilds the widget container
 // and requests a render, which is how each animation frame gets painted.
 //
-// The mascot is hand-authored pixel art (`mascot/art.ts`). Each terminal cell
-// carries two art pixels as a half block (`▀`, foreground on top, background
-// below). A half-block pixel is taller than it is wide in this terminal
-// (~17x47 px cells), so the art is authored 19 columns wide to compensate
-// instead of resampling columns at render time, which made the strokes uneven.
-// Frames are palette indices: `0` is transparent, `1`-`9` index PALETTE. Every
-// frame shares the same 19x9 art-pixel canvas, which keeps the widget height
-// fixed when the state (and so the animation) changes.
+// Two art systems render here, picked by `MASCOT` (mascot/config.ts, shared with
+// the Claude Code plugin): a glyph grid (mascot/clawd.ts) or hand-authored pixel
+// art (mascot/art.ts). For the pixel art, each terminal cell carries two art
+// pixels as a half block (`▀`, foreground on top, background below). A half-block
+// pixel is taller than it is wide in this terminal (~17x47 px cells), so that art
+// is authored 19 columns wide to compensate instead of resampling columns at
+// render time, which made the strokes uneven. Its frames are palette indices:
+// `0` is transparent, `1`-`9` index PALETTE. Every frame of a given system shares
+// one canvas, which keeps the widget height fixed when the state changes.
 
-/** Artwork column count; the canvas is shared by every animation. */
+/** Puddle artwork column count; the canvas is shared by every animation. */
 const ART_WIDTH = ART.cols;
-/** Terminal rows the artwork occupies: two art pixels per cell. */
+/** Puddle terminal rows: two art pixels per cell. */
 const ART_ROWS = Math.ceil(ART.pxRows / 2);
 
-/** Animation per mascot state: a dozing puddle while waiting, a coffee sip while the agent works. */
+/** Animation per puddle state: a dozing puddle while waiting, a coffee sip while the agent works. */
 const IDLE_ANIM = "idle";
 const WORKING_ANIM = "working";
+
+/** Claude swaps Clawd for eyes-only art on Apple Terminal; block glyphs render unevenly there. */
+const SIMPLE_BODY = Bun.env.TERM_PROGRAM === "Apple_Terminal";
+
+/** Clawd's palette, verbatim from Claude Code's theme (`clawd_body`, `clawd_background`). */
+const CLAWD_BODY = "#d77757";
+const CLAWD_BACKGROUND = "#000000";
 /** Narrowest inner width; below this the mascot paints alone. */
 const BUBBLE_MIN_INNER = 24;
 /** Widest inner width: past this the eye has to travel farther than it reads. */
@@ -36,8 +46,13 @@ const BUBBLE_MAX_INNER = 64;
 /** Core's own working-row text before any tool reports an intent. */
 const DEFAULT_LABEL = "Working";
 
-/** Timer granularity: animation frames advance every other tick, i.e. 220 ms. */
-const TICK_MS = 110;
+/**
+ * Timer granularity, and how many ticks one animation frame lasts. Clawd's
+ * playlists tick every 60 ms in Claude, so it advances every tick; the puddle's
+ * 220 ms cadence keeps the coffee smoke from boiling.
+ */
+const TICK_MS = MASCOT === "clawd" ? FRAME_MS : 110;
+const TICKS_PER_FRAME = MASCOT === "clawd" ? 1 : 2;
 const DOT_FRAMES = 4;
 const WIDGET_KEY = "mascot-bubble";
 /**
@@ -144,31 +159,77 @@ class MascotBubble {
 		return `${paintCodes(top, truecolor).fg}${paintCodes(bottom, truecolor).bg}▀\x1b[39m\x1b[49m`;
 	}
 
-	#build(width: number): readonly string[] {
-		const working = this.#state.kind === "working";
-		const label = working ? this.#state.label : "";
+	#clawdRows(working: boolean, columns: number, truecolor: boolean): readonly string[] {
+		const anim = working ? CLAWD_ANIMS.working : CLAWD_ANIMS.idle;
+		return clawdFrame(anim, this.#frame, SIMPLE_BODY).map(row => this.#paintRow(row.slice(0, columns), truecolor));
+	}
+
+	#puddleRows(working: boolean, columns: number, truecolor: boolean): readonly string[] {
 		const art = ART.anims[working ? WORKING_ANIM : IDLE_ANIM] ?? ART.anims[IDLE_ANIM]!;
 		const grid = art.frames[this.#frame % art.frames.length]!;
-		const truecolor = this.#theme.getColorMode?.() === "truecolor";
-		const gap = "  ";
-		// The bubble takes whatever the terminal leaves after the art, up to a readable cap.
-		const available = width - ART_WIDTH - gap.length - 2;
-		const roomForBubble = available >= BUBBLE_MIN_INNER;
-		// Narrow terminal: the mascot alone, clipped by columns so no escape is cut.
-		const artCols = roomForBubble ? ART_WIDTH : Math.min(ART_WIDTH, width);
-
-		const artRows: string[] = [];
+		const rows: string[] = [];
 		for (let row = 0; row < ART_ROWS; row++) {
 			let line = "";
-			for (let col = 0; col < artCols; col++) {
+			for (let col = 0; col < columns; col++) {
 				const topIndex = grid[row * 2]![col]!;
 				const bottomIndex = grid[row * 2 + 1]?.[col] ?? "0";
 				const top = topIndex === "0" ? null : (ART.palette[parseInt(topIndex, 36) - 1] ?? null);
 				const bottom = bottomIndex === "0" ? null : (ART.palette[parseInt(bottomIndex, 36) - 1] ?? null);
 				line += this.#cell(top, bottom, truecolor);
 			}
-			artRows.push(line);
+			rows.push(line);
 		}
+		return rows;
+	}
+
+	/** One run of cells that share a colour pair, so a row carries a handful of escapes, not one per cell. */
+	#paintRun(cells: readonly ClawdCell[], truecolor: boolean): string {
+		const text = cells.map(cell => cell.glyph).join("");
+		const { fg, bg } = cells[0]!;
+		if (!bg && text.trim() === "") return text;
+		if (fg === "inactive") return this.#theme.fg("dim", text);
+		const fgCode = paintCodes(fg === "body" ? CLAWD_BODY : CLAWD_BACKGROUND, truecolor).fg;
+		if (bg === null) return `${fgCode}${text}\x1b[39m`;
+		const bgCode = paintCodes(bg === "body" ? CLAWD_BODY : CLAWD_BACKGROUND, truecolor).bg;
+		return `${fgCode}${bgCode}${text}\x1b[39m\x1b[49m`;
+	}
+
+	#paintRow(cells: readonly ClawdCell[], truecolor: boolean): string {
+		let line = "";
+		let run: ClawdCell[] = [];
+		const flush = () => {
+			if (run.length === 0) return;
+			line += this.#paintRun(run, truecolor);
+			run = [];
+		};
+		for (const cell of cells) {
+			const previous = run.at(-1);
+			if (previous && previous.fg === cell.fg && previous.bg === cell.bg) run.push(cell);
+			else {
+				flush();
+				run.push(cell);
+			}
+		}
+		flush();
+		return line;
+	}
+
+	#build(width: number): readonly string[] {
+		const working = this.#state.kind === "working";
+		const label = working ? this.#state.label : "";
+		const truecolor = this.#theme.getColorMode?.() === "truecolor";
+		const gap = "  ";
+		const artWidth = MASCOT === "clawd" ? BODY_COLS : ART_WIDTH;
+		// The bubble takes whatever the terminal leaves after the art, up to a readable cap.
+		const available = width - artWidth - gap.length - 2;
+		const roomForBubble = available >= BUBBLE_MIN_INNER;
+		// Narrow terminal: the mascot alone, clipped by columns so no escape is cut.
+		const artCols = roomForBubble ? artWidth : Math.min(artWidth, width);
+
+		const artRows =
+			MASCOT === "clawd"
+				? this.#clawdRows(working, artCols, truecolor)
+				: this.#puddleRows(working, artCols, truecolor);
 		if (!roomForBubble) return artRows;
 
 		const inner = Math.min(BUBBLE_MAX_INNER, available);
@@ -188,7 +249,7 @@ class MascotBubble {
 			),
 			this.#theme.fg(border, `╰${"─".repeat(inner)}╯`),
 		];
-		const top = Math.floor((ART_ROWS - bubble.length) / 2);
+		const top = Math.floor((artRows.length - bubble.length) / 2);
 
 		return artRows.map((row, index) => {
 			const bubbleLine = bubble[index - top];
@@ -242,10 +303,8 @@ export default function (pi: MascotExtensionAPI) {
 
 		let ticks = 0;
 		const timer = ctx.setInterval(() => {
-			// One frame per two ticks (220 ms): at 110 ms the coffee smoke boils
-			// too fast to read as smoke, and the sleeping puddle needs even less.
 			ticks++;
-			if (ticks % 2 !== 0) return;
+			if (ticks % TICKS_PER_FRAME !== 0) return;
 			frame++;
 			paint();
 		}, TICK_MS);
