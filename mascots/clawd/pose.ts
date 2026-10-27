@@ -1,32 +1,29 @@
 import {
 	ARMS,
-	AUTOPLAY,
 	BODY_COLS,
 	BODY_ROWS,
 	EYES,
 	FACING,
 	FEET,
-	FRAME_MS,
 	POSES,
-	SEQUENCES,
 	SIMPLE_EYES,
 	type FacingPose,
 	type FrameSpec,
 	type Pose,
 	type PoseName,
-} from "./clawd-data";
+} from "./data";
 
 // Clawd: the Claude Code mascot, ported from a shipped build (v2.1.311). Unlike
-// `art.ts`, this is not pixel art — a frame is a 9x3 grid of block glyphs painted
+// the puddle, this is not pixel art — a frame is a 9x3 grid of block glyphs painted
 // with one body colour, and the eye/arm/feet sprites only decide which glyphs
 // land in that grid. Cells that Claude renders on its background colour (eye
 // spans, eyelid spans, the side-view window) keep that background here so the
 // body reads as a solid silhouette with dark holes rather than as loose strokes.
 //
 // Frames are described, not drawn: `buildClawdFrame` resolves a `FrameSpec` into
-// cells, so every playlist in `clawd-data.ts` renders through the same path.
+// cells, so every playlist in `data.ts` renders through the same path.
 
-/** Colour role for a cell; the caller maps these to real escape codes. */
+/** Colour role for a cell; `index.ts` resolves these to the palette. */
 export type Paint = "body" | "background" | "inactive";
 
 /** One terminal cell of a frame. `bg` is null when the body leaves it unpainted. */
@@ -46,18 +43,6 @@ const POOF = { dot: "·", wave: "~" } as const;
 const SHADOW = { wide: { glyphs: "▁▁▁", left: 3 }, narrow: { glyphs: "▁", left: 4 } } as const;
 /** The middle row is a fixed bar; only the eye row and the feet change between poses. */
 const CHEST = "█████";
-
-/**
- * Claude swaps the whole body for eye-only art on Apple Terminal, whose block
- * glyphs render unevenly. The caller decides, so this module stays free of host
- * globals: the omp widget passes `Bun.env.TERM_PROGRAM === "Apple_Terminal"`,
- * the Claude Code plugin (which runs in a sandbox without `Bun`) passes false.
- */
-
-/** Playlists the widget drives: Claude's autoplay loop, and the tapping feet it uses while busy. */
-export const CLAWD_ANIMS = { idle: AUTOPLAY, working: SEQUENCES.tap } as const;
-
-export { BODY_COLS, BODY_ROWS, FRAME_MS };
 
 function isFacing(pose: PoseName | Pose | FacingPose): pose is FacingPose {
 	return typeof pose !== "string" && "facing" in pose;

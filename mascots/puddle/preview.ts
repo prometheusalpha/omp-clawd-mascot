@@ -1,7 +1,7 @@
-// Renders `art.ts` to `mascot/preview.png` so the pixel art can be checked
+// Renders `art.ts` to `preview.png` beside it so the pixel art can be checked
 // outside the TUI: one row per animation, one column per frame, scaled up with
 // nearest-neighbour. The sheet uses the terminal's pixel aspect, not square
-// pixels, so it matches the TUI. `bun mascot/render.ts`.
+// pixels, so it matches the TUI. `bun mascots/puddle/preview.ts`.
 import { deflateSync } from "node:zlib";
 import { ART } from "./art";
 
@@ -98,4 +98,4 @@ for (const [row, anim] of frames.entries()) {
 }
 
 await Bun.write(new URL("./preview.png", import.meta.url), encodePng(width, height, rgba));
-console.log(`mascot/preview.png ${width}x${height}`);
+console.log(`mascots/puddle/preview.png ${width}x${height}`);

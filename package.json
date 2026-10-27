@@ -1,0 +1,5 @@
+{
+  "name": "omp-mascot",
+  "private": true,
+  "omp": { "extensions": ["./agents/omp/index.ts"] }
+}
