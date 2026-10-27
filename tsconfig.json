@@ -1,5 +1,5 @@
 {
   "extends": "./.claude-plugin/types/tsconfig.json",
   "include": ["agents/claude-code", "core", "mascots", "config.ts", "types", "tests"],
-  "exclude": ["mascots/*/preview.ts"]
+  "exclude": ["mascots/*/preview.ts", "mascots/*/play.ts"]
 }

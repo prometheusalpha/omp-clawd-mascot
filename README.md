@@ -119,13 +119,25 @@ Provenance: the glyph tables and playlists were extracted from the shipped Claud
 
 Edit `mascots/puddle/art.ts` directly — it is the source of truth for the puddle art. Row strings are the pixel grid; `PUDDLE` is the sleeping pose and each animation lists the frames in play order. `mascots/clawd/data.ts` is data, not hand art: change it only when the ported tables change, and keep the minified names in the comments.
 
-To look at the puddle art outside the TUI:
+To look at the art outside the TUI:
 
 ```sh
 bun mascots/puddle/preview.ts   # art.ts -> mascots/puddle/preview.png
+bun mascots/clawd/preview.ts    # every Clawd playlist -> mascots/clawd/preview.png
 ```
 
-`preview.png` lays every animation out as a row of frames, scaled up with nearest-neighbour at the terminal's pixel aspect (tall half-blocks, not square pixels), so the sheet shows what the TUI shows. The PNG is written by `preview.ts` with a minimal encoder, so no image tooling is required.
+Each `preview.png` lays every animation out as a row of frames at the terminal's cell aspect (tall cells, not square pixels), so the sheet shows what the TUI shows. The puddle sheet scales its art pixels up with nearest-neighbour; the Clawd sheet labels each row and rasterises the glyphs itself (quadrant blocks as 2 × 2 geometry, `▁▂·~` by hand), so it throws on a glyph it has no raster for. Both are written by the minimal encoder in `tools/png.ts`, so no image tooling or font is required.
+
+To watch Clawd move instead, play its playlists live in the terminal, painted by the omp agent's own `paintRow` at Claude's 60 ms:
+
+```sh
+bun mascots/clawd/play.ts               # every playlist in turn, looping; Ctrl+C stops
+bun mascots/clawd/play.ts turn          # one playlist, looping
+bun mascots/clawd/play.ts turn --once   # play through once, then exit
+bun mascots/clawd/play.ts --simple      # the eyes-only Apple Terminal body
+```
+
+Colours are truecolor when `COLORTERM` says so, 256-colour otherwise.
 
 Which animation a state uses is chosen inside each mascot: `ART.anims` keys for the puddle, `ANIMS` in `mascots/clawd/index.ts` for Clawd.
 
@@ -147,10 +159,14 @@ claude plugin validate .     # what the engine will accept from the manifest and
 | `mascots/clawd/index.ts` | Clawd as a `Mascot`: playlists per state, palette |
 | `mascots/clawd/pose.ts` | Clawd pose → cell renderer with colour roles |
 | `mascots/clawd/data.ts` | Clawd glyph, pose and playlist tables (extracted, not hand-authored) |
+| `mascots/clawd/preview.ts` | Renders every Clawd playlist to `preview.png` |
+| `mascots/clawd/preview.png` | Generated preview sheet, one labelled row per playlist |
+| `mascots/clawd/play.ts` | Plays Clawd's playlists live in the terminal |
 | `mascots/puddle/index.ts` | The puddle as a `Mascot`: art pixels → half-block cells |
 | `mascots/puddle/art.ts` | Hand-authored palette-indexed puddle frames |
 | `mascots/puddle/preview.ts` | Renders `art.ts` to `preview.png` |
 | `mascots/puddle/preview.png` | Generated preview sheet, one row per animation |
+| `tools/png.ts` | Minimal PNG encoder for the preview scripts |
 | `agents/omp/index.ts` | omp extension entry: event wiring, animation timer |
 | `agents/omp/bubble.ts` | omp widget: mascot plus speech bubble |
 | `agents/omp/ansi.ts` | Paints cells as ANSI escapes |
